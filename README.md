@@ -1,6 +1,21 @@
-# Project finalsign
+#  finalsign
+when developing locally: 
+```bash
+docker compose up
+```
+open a new terminal
+```bash
+make build
+```
+```bash
+make migrate-up
+```
+```bash
+make run
+```
 
-One Paragraph of project description goes here
+
+
 
 ## Getting Started
 
@@ -51,3 +66,7 @@ Clean up binary from the last build:
 ```bash
 make clean
 ```
+
+
+
+

@@ -25,7 +25,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Use(sessions.Sessions("finalsign-session", store))
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     []string{"http://localhost:3000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -110,7 +110,7 @@ func (s *Server) authCallbackHandler(c *gin.Context) {
 	session.Save()
 
 	// Redirect to frontend or return success
-	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:5173/dashboard")
+	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/dashboard")
 }
 
 func (s *Server) logoutHandler(c *gin.Context) {

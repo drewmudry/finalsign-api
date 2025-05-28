@@ -1,4 +1,6 @@
 # Simple Makefile for a Go project
+include .env
+export
 
 # Build the application
 all: build test
@@ -61,7 +63,6 @@ watch:
             fi; \
         fi
 
-.PHONY: all build run test clean watch docker-run docker-down itest
 
 migrate-up:
 	@echo "Running migrations..."
@@ -75,4 +76,4 @@ migrate-create:
 	@read -p "Migration name: " name; \
 	migrate create -ext sql -dir migrations -seq $$name
 
-.PHONY: migrate-up migrate-down migrate-create
+.PHONY: all build run test clean watch docker-run docker-down itest migrate-up migrate-down migrate-create
