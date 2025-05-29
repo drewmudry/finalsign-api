@@ -25,6 +25,7 @@ type Service interface {
 	GetUserByProviderID(provider, providerID string) (*User, error)
 	GetUserByEmail(email string) (*User, error)
 	GetUserByID(id int) (*User, error)
+	CreateWaitlistEntry(waitlist *Waitlist) error
 }
 
 type service struct {

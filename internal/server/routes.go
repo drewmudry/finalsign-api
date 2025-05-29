@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
@@ -39,6 +40,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/auth/:provider/callback", s.authCallbackHandler)
 	r.GET("/logout", s.logoutHandler)
 	r.GET("/user", s.AuthMiddleware(), s.userHandler)
+	r.POST("/waitlist", s.WaitlistHandler)
 
 	r.GET("/dashboard", s.AuthMiddleware(), s.DashboardHandler)
 
@@ -183,4 +185,41 @@ func (s *Server) DashboardHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"email": user.Email, "authenticated": true})
+}
+
+func (s *Server) WaitlistHandler(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+		Name  string `json:"name"`
+		Phone string `json:"phone"`
+	}
+
+	// Parse and validate request body
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create waitlist entry
+	waitlist := &database.Waitlist{
+		Email: req.Email,
+		Name:  req.Name,
+		Phone: req.Phone,
+	}
+
+	if err := s.db.CreateWaitlistEntry(waitlist); err != nil {
+		// Check if it's a duplicate key error
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists in waitlist"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to waitlist"})
+		return
+	}
+
+	// Return success response
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Successfully added to waitlist",
+		"data":    waitlist,
+	})
 }
