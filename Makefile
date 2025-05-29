@@ -66,11 +66,11 @@ watch:
 
 migrate-up:
 	@echo "Running migrations..."
-	@migrate -path migrations -database "postgres://$(BLUEPRINT_DB_USERNAME):$(BLUEPRINT_DB_PASSWORD)@$(BLUEPRINT_DB_HOST):$(BLUEPRINT_DB_PORT)/$(BLUEPRINT_DB_DATABASE)?sslmode=disable&search_path=$(BLUEPRINT_DB_SCHEMA)" up
+	@migrate -path migrations -database "$(DB_STRING)" up
 
 migrate-down:
 	@echo "Rolling back migrations..."
-	@migrate -path migrations -database "postgres://$(BLUEPRINT_DB_USERNAME):$(BLUEPRINT_DB_PASSWORD)@$(BLUEPRINT_DB_HOST):$(BLUEPRINT_DB_PORT)/$(BLUEPRINT_DB_DATABASE)?sslmode=disable&search_path=$(BLUEPRINT_DB_SCHEMA)" down
+	@migrate -path migrations -database "$(DB_STRING)" down
 
 migrate-create:
 	@read -p "Migration name: " name; \

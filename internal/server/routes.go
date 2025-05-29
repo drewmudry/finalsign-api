@@ -38,11 +38,41 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/auth/:provider", s.authHandler)
 	r.GET("/auth/:provider/callback", s.authCallbackHandler)
 	r.GET("/logout", s.logoutHandler)
-	r.GET("/user", s.userHandler)
+	r.GET("/user", s.AuthMiddleware(), s.userHandler)
 
-	r.GET("/dashboard", s.DashboardHandler)
+	r.GET("/dashboard", s.AuthMiddleware(), s.DashboardHandler)
 
 	return r
+}
+
+func (s *Server) AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		userIDRaw := session.Get("user_id")
+
+		if userIDRaw == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+			return
+		}
+
+		userID, ok := userIDRaw.(int)
+		if !ok {
+			// Log this error, as it indicates a problem with session data type
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid session data"})
+			return
+		}
+
+		user, err := s.db.GetUserByID(userID)
+		if err != nil {
+			// This could be a database error or user not found
+			// For security, treat as unauthenticated if user not found
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not found or database error"})
+			return
+		}
+
+		c.Set("user", user) // Store user object in context
+		c.Next()
+	}
 }
 
 func (s *Server) HelloWorldHandler(c *gin.Context) {
@@ -122,27 +152,35 @@ func (s *Server) logoutHandler(c *gin.Context) {
 }
 
 func (s *Server) userHandler(c *gin.Context) {
-	session := sessions.Default(c)
-	userID := session.Get("user_id")
-
-	if userID == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+	userRaw, exists := c.Get("user")
+	if !exists {
+		// This should ideally not happen if middleware is correctly applied
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found in context"})
 		return
 	}
 
-	// You could fetch full user details from database here
-	c.JSON(http.StatusOK, gin.H{"user_id": userID, "authenticated": true})
+	user, ok := userRaw.(*database.User)
+	if !ok {
+		// This indicates a programming error (e.g. wrong type stored in context)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user type in context"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user_id": user.ID, "email": user.Email, "name": user.Name, "avatar_url": user.AvatarURL, "authenticated": true})
 }
 
 func (s *Server) DashboardHandler(c *gin.Context) {
-	session := sessions.Default(c)
-	user_email := session.Get("email")
-
-	if user_email == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+	userRaw, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found in context"})
 		return
 	}
 
-	// You could fetch full user details from database here
-	c.JSON(http.StatusOK, gin.H{"email": user_email, "authenticated": true})
+	user, ok := userRaw.(*database.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user type in context"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"email": user.Email, "authenticated": true})
 }
