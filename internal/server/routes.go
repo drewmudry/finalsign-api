@@ -141,8 +141,12 @@ func (s *Server) authCallbackHandler(c *gin.Context) {
 	session.Set("email", user.Email)
 	session.Save()
 
-	// Redirect to frontend or return success
-	c.Redirect(http.StatusTemporaryRedirect, "http://localhost:3000/dashboard")
+	redirectURL := os.Getenv("FRONTEND_URL")
+	if redirectURL == "" {
+		redirectURL = "https://finalsign.io"
+	}
+
+	c.Redirect(http.StatusTemporaryRedirect, redirectURL+"/dashboard")
 }
 
 func (s *Server) logoutHandler(c *gin.Context) {
