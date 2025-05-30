@@ -26,7 +26,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Use(sessions.Sessions("finalsign-session", store))
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"http://localhost:3000", "https://finalsign.io", "https://www.finalsign.io"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
