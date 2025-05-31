@@ -40,9 +40,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/auth/:provider/callback", s.authCallbackHandler)
 	r.GET("/logout", s.logoutHandler)
 	r.GET("/user", s.AuthMiddleware(), s.userHandler)
-	r.POST("/waitlist", s.WaitlistHandler)
 
 	r.GET("/dashboard", s.AuthMiddleware(), s.DashboardHandler)
+
+	// Workspace routes
+	r.GET("/workspaces", s.AuthMiddleware(), s.GetUserWorkspacesHandler)
+	r.GET("/workspaces/:slug", s.AuthMiddleware(), s.WorkspaceMiddleware(), s.GetWorkspaceHandler)
+	r.POST("/workspaces/:slug/invite", s.AuthMiddleware(), s.WorkspaceMiddleware(), s.InviteToWorkspaceHandler)
+	r.POST("/workspaces/:slug/accept-invite", s.AuthMiddleware(), s.AcceptWorkspaceInvitationHandler)
 
 	return r
 }
@@ -59,20 +64,40 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 
 		userID, ok := userIDRaw.(int)
 		if !ok {
-			// Log this error, as it indicates a problem with session data type
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid session data"})
 			return
 		}
 
 		user, err := s.db.GetUserByID(userID)
 		if err != nil {
-			// This could be a database error or user not found
-			// For security, treat as unauthenticated if user not found
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not found or database error"})
 			return
 		}
 
 		c.Set("user", user) // Store user object in context
+		c.Next()
+	}
+}
+
+// WorkspaceMiddleware checks if user has access to the workspace
+func (s *Server) WorkspaceMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := c.Get("user")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "User not found in context"})
+			return
+		}
+
+		userObj := user.(*database.User)
+		workspaceSlug := c.Param("slug")
+
+		userWorkspace, err := s.db.CheckUserWorkspaceAccess(userObj.ID, workspaceSlug)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access denied to workspace"})
+			return
+		}
+
+		c.Set("workspace", userWorkspace)
 		c.Next()
 	}
 }
@@ -90,11 +115,9 @@ func (s *Server) healthHandler(c *gin.Context) {
 func (s *Server) authHandler(c *gin.Context) {
 	provider := c.Param("provider")
 
-	// Create a new request with the correct path for gothic
 	req := c.Request.Clone(c.Request.Context())
 	req.URL.Path = "/auth/" + provider
 
-	// Add the provider to the URL query params (gothic expects this)
 	q := req.URL.Query()
 	q.Add("provider", provider)
 	req.URL.RawQuery = q.Encode()
@@ -105,11 +128,9 @@ func (s *Server) authHandler(c *gin.Context) {
 func (s *Server) authCallbackHandler(c *gin.Context) {
 	provider := c.Param("provider")
 
-	// Create a new request with the correct path for gothic
 	req := c.Request.Clone(c.Request.Context())
 	req.URL.Path = "/auth/" + provider + "/callback"
 
-	// Add the provider to the URL query params
 	q := req.URL.Query()
 	q.Add("provider", provider)
 	req.URL.RawQuery = q.Encode()
@@ -120,7 +141,6 @@ func (s *Server) authCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Create or update user in database
 	user := &database.User{
 		Provider:   gothUser.Provider,
 		ProviderID: gothUser.UserID,
@@ -135,7 +155,6 @@ func (s *Server) authCallbackHandler(c *gin.Context) {
 		return
 	}
 
-	// Store user ID in session
 	session := sessions.Default(c)
 	session.Set("user_id", user.ID)
 	session.Set("email", user.Email)
@@ -146,33 +165,37 @@ func (s *Server) authCallbackHandler(c *gin.Context) {
 		redirectURL = "https://finalsign.io"
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, redirectURL+"/dashboard")
+	c.Redirect(http.StatusTemporaryRedirect, redirectURL+"/home")
 }
 
 func (s *Server) logoutHandler(c *gin.Context) {
-	session := sessions.Default(c)
-	session.Clear()
-	session.Save()
+    session := sessions.Default(c)
+    session.Clear()
+    session.Save()
 
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+    c.Redirect(http.StatusFound, "http://localhost:3000/")
 }
 
 func (s *Server) userHandler(c *gin.Context) {
 	userRaw, exists := c.Get("user")
 	if !exists {
-		// This should ideally not happen if middleware is correctly applied
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found in context"})
 		return
 	}
 
 	user, ok := userRaw.(*database.User)
 	if !ok {
-		// This indicates a programming error (e.g. wrong type stored in context)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user type in context"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user_id": user.ID, "email": user.Email, "name": user.Name, "avatar_url": user.AvatarURL, "authenticated": true})
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":       user.ID,
+		"email":         user.Email,
+		"name":          user.Name,
+		"avatar_url":    user.AvatarURL,
+		"authenticated": true,
+	})
 }
 
 func (s *Server) DashboardHandler(c *gin.Context) {
@@ -188,42 +211,114 @@ func (s *Server) DashboardHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"email": user.Email, "authenticated": true})
-}
-
-func (s *Server) WaitlistHandler(c *gin.Context) {
-	var req struct {
-		Email string `json:"email" binding:"required,email"`
-		Name  string `json:"name"`
-		Phone string `json:"phone"`
+	// Get user's workspaces for the dashboard
+	workspaces, err := s.db.GetUserWorkspaces(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch workspaces"})
+		return
 	}
 
-	// Parse and validate request body
+	c.JSON(http.StatusOK, gin.H{
+		"email":         user.Email,
+		"workspaces":    workspaces,
+	})
+}
+
+// GetUserWorkspacesHandler returns all workspaces for the authenticated user
+func (s *Server) GetUserWorkspacesHandler(c *gin.Context) {
+	userRaw, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	user, ok := userRaw.(*database.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user type in context"})
+		return
+	}
+
+	workspaces, err := s.db.GetUserWorkspaces(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch workspaces"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"workspaces": workspaces})
+}
+
+// GetWorkspaceHandler returns details for a specific workspace
+func (s *Server) GetWorkspaceHandler(c *gin.Context) {
+	workspace := c.MustGet("workspace").(*database.UserWorkspace)
+	c.JSON(http.StatusOK, gin.H{"workspace": workspace})
+}
+
+// InviteToWorkspaceHandler invites a user to a workspace by email
+func (s *Server) InviteToWorkspaceHandler(c *gin.Context) {
+	user := c.MustGet("user").(*database.User)
+	workspace := c.MustGet("workspace").(*database.UserWorkspace)
+
+	// Check if user has permission to invite (owner or admin)
+	if workspace.Role != "owner" && workspace.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions to invite users"})
+		return
+	}
+
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+		Role  string `json:"role" binding:"required"`
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Create waitlist entry
-	waitlist := &database.Waitlist{
-		Email: req.Email,
-		Name:  req.Name,
-		Phone: req.Phone,
-	}
-
-	if err := s.db.CreateWaitlistEntry(waitlist); err != nil {
-		// Check if it's a duplicate key error
-		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			c.JSON(http.StatusConflict, gin.H{"error": "Email already exists in waitlist"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add to waitlist"})
+	// Validate role
+	validRoles := map[string]bool{"member": true, "admin": true, "viewer": true}
+	if !validRoles[req.Role] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role. Must be member, admin, or viewer"})
 		return
 	}
 
-	// Return success response
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Successfully added to waitlist",
-		"data":    waitlist,
-	})
+	err := s.db.InviteUserToWorkspace(workspace.WorkspaceID, req.Email, user.ID, req.Role)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User with that email not found"})
+			return
+		}
+		if strings.Contains(err.Error(), "already a member") {
+			c.JSON(http.StatusConflict, gin.H{"error": "User is already a member of this workspace"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send invitation"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Invitation sent successfully"})
+}
+
+// AcceptWorkspaceInvitationHandler accepts a workspace invitation
+func (s *Server) AcceptWorkspaceInvitationHandler(c *gin.Context) {
+	user := c.MustGet("user").(*database.User)
+	workspaceSlug := c.Param("slug")
+
+	// Get workspace by slug
+	workspace, err := s.db.GetWorkspaceBySlug(workspaceSlug)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Workspace not found"})
+		return
+	}
+
+	err = s.db.AcceptWorkspaceInvitation(user.ID, workspace.ID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no pending invitation") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No pending invitation found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept invitation"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Invitation accepted successfully"})
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -25,7 +26,16 @@ type Service interface {
 	GetUserByProviderID(provider, providerID string) (*User, error)
 	GetUserByEmail(email string) (*User, error)
 	GetUserByID(id int) (*User, error)
-	CreateWaitlistEntry(waitlist *Waitlist) error
+
+	// Workspace operations
+	CreateWorkspaceForUser(userID int, workspaceName string) (*Workspace, error)
+	GetUserWorkspaces(userID int) ([]UserWorkspace, error)
+	GetWorkspaceBySlug(slug string) (*Workspace, error)
+	CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*UserWorkspace, error)
+	InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail string, inviterUserID int, role string) error
+	AcceptWorkspaceInvitation(userID int, workspaceID uuid.UUID) error
+
+	// Waitlist operations (existing)
 }
 
 type service struct {
