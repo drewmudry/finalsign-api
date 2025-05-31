@@ -1,15 +1,39 @@
+version: '3.8'
+
 services:
-  psql_finalsign:
+  postgres:
     image: postgres:latest
-    restart: unless-stopped
+    container_name: local_postgres
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
+      POSTGRES_USER: finalsign_owner
       POSTGRES_PASSWORD: password1234
+      POSTGRES_DB: finalsign
     ports:
       - "5432:5432"
     volumes:
-      - psql_volume_finalsign:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - local_dev_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: local_minio
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - local_dev_network
 
 volumes:
-  psql_volume_finalsign:
+  postgres_data:
+  minio_data:
+
+networks:
+  local_dev_network:
+    driver: bridge

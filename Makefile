@@ -66,6 +66,7 @@ watch:
 
 migrate-up:
 	@echo "Running migrations..."
+	@echo "DB_STRING is: $(DB_STRING)"
 	@migrate -path migrations -database "$(DB_STRING)" up
 
 migrate-down:
