@@ -33,9 +33,25 @@ type Service interface {
 	GetWorkspaceBySlug(slug string) (*Workspace, error)
 	CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*UserWorkspace, error)
 	InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail string, inviterUserID int, role string) error
-	AcceptWorkspaceInvitation(userID int, workspaceID uuid.UUID) error
+	AcceptWorkspaceInvitationByToken(token string, userID int) error
+	DeclineWorkspaceInvitation(token string, userID int) error
+	
+	// NEW: Workspace management methods
+	UpdateWorkspace(workspaceID uuid.UUID, name, description, settings string, userID int) error
+	GetWorkspaceMembers(workspaceID uuid.UUID, userID int) ([]WorkspaceMember, error)
+	GetWorkspacePendingInvitations(workspaceID uuid.UUID, userID int) ([]WorkspaceInvitation, error)
+	UpdateMemberRole(workspaceID uuid.UUID, memberUserID int, newRole string, updaterUserID int) error
+	RemoveMemberFromWorkspace(workspaceID uuid.UUID, memberUserID int, removerUserID int) error
+	CancelWorkspaceInvitation(invitationID uuid.UUID, userID int) error
 
-	// Waitlist operations (existing)
+	// Invitation operations
+	GetPendingInvitationByToken(token string) (*PendingInvitation, error)
+	GetUserInvitations(userID int) ([]*PendingInvitation, error)
+
+	// Notification operations
+	CreateNotification(notification *Notification) error
+	GetUserNotifications(userID int, limit int) ([]*Notification, error)
+	MarkNotificationAsRead(notificationID uuid.UUID, userID int) error
 }
 
 type service struct {
