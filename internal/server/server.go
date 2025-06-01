@@ -14,9 +14,14 @@ import (
 
 type Server struct {
 	port int
-
-	db database.Service
+	db	database.Service
 }
+
+func (s *Server) GetDB() database.Service {
+	return s.db
+}
+
+
 
 func NewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
