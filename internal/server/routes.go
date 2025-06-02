@@ -36,11 +36,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	authRoutes := routes.NewAuthRoutes(s)
 	userRoutes := routes.NewUserRoutes(s)
 	workspaceRoutes := routes.NewWorkspaceRoutes(s)
+	notificationRoutes := routes.NewNotificationRoutes(s)
 
 	// Register route groups
 	authRoutes.RegisterRoutes(r)
 	userRoutes.RegisterRoutes(r)
 	workspaceRoutes.RegisterRoutes(r)
+	notificationRoutes.RegisterRoutes(r)
 
 	return r
 }
