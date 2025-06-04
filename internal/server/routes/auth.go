@@ -9,6 +9,7 @@ import (
 	"github.com/markbates/goth/gothic"
 
 	"finalsign/internal/database"
+	"finalsign/internal/storage"
 )
 
 type AuthRoutes struct {
@@ -17,6 +18,7 @@ type AuthRoutes struct {
 
 type ServerInterface interface {
 	GetDB() database.Service
+	GetS3Service() *storage.S3Service
 }
 
 func NewAuthRoutes(server ServerInterface) *AuthRoutes {

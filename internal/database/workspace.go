@@ -20,15 +20,15 @@ type Workspace struct {
 }
 
 type WorkspaceMembership struct {
-	ID          uuid.UUID `json:"id"`
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	UserID      int       `json:"user_id"`
-	Role        string    `json:"role"`        // owner, admin, member, viewer
-	Status      string    `json:"status"`      // active, suspended, invited
-	InvitedBy   *int      `json:"invited_by"`  // nullable
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	UserID      int        `json:"user_id"`
+	Role        string     `json:"role"`       // owner, admin, member, viewer
+	Status      string     `json:"status"`     // active, suspended, invited
+	InvitedBy   *int       `json:"invited_by"` // nullable
 	InvitedAt   *time.Time `json:"invited_at"` // nullable
-	JoinedAt    time.Time `json:"joined_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	JoinedAt    time.Time  `json:"joined_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type UserWorkspace struct {
@@ -56,17 +56,17 @@ type WorkspaceMember struct {
 }
 
 type WorkspaceInvitation struct {
-	ID            uuid.UUID  `json:"id"`
-	WorkspaceID   uuid.UUID  `json:"workspace_id"`
-	InviterID     int        `json:"inviter_id"`
-	InviterName   string     `json:"inviter_name"`
-	InviteeEmail  string     `json:"invitee_email"`
-	InviteeID     *int       `json:"invitee_id"`
-	Role          string     `json:"role"`
-	Status        string     `json:"status"`
-	Token         string     `json:"token"`
-	ExpiresAt     time.Time  `json:"expires_at"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	WorkspaceID  uuid.UUID `json:"workspace_id"`
+	InviterID    int       `json:"inviter_id"`
+	InviterName  string    `json:"inviter_name"`
+	InviteeEmail string    `json:"invitee_email"`
+	InviteeID    *int      `json:"invitee_id"`
+	Role         string    `json:"role"`
+	Status       string    `json:"status"`
+	Token        string    `json:"token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // CreateWorkspaceForUser creates a new workspace and makes the user an owner
@@ -172,7 +172,11 @@ func (s *service) CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*U
 			user_id, email, user_name, workspace_id, workspace_name, 
 			workspace_slug, role, membership_status, joined_at, plan, workspace_active
 		FROM user_workspaces 
-		WHERE user_id = $1 AND workspace_slug = $2`
+		WHERE user_id = $1 
+		AND workspace_slug = $2
+		AND role IN ('owner', 'admin', 'member')
+		AND membership_status = 'active'
+		AND workspace_active = true`
 
 	err := s.db.QueryRow(query, userID, workspaceSlug).Scan(
 		&uw.UserID, &uw.Email, &uw.UserName, &uw.WorkspaceID,
@@ -181,7 +185,7 @@ func (s *service) CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*U
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("access denied: user does not have required permissions for workspace")
 	}
 
 	return &uw, nil
@@ -195,12 +199,12 @@ func (s *service) InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail stri
 	invitedUser, err := s.GetUserByEmail(invitedEmail)
 	if err == nil {
 		invitedUserID = &invitedUser.ID
-		
+
 		// Check if user is already a member
 		existingQuery := `
 			SELECT id FROM workspace_memberships 
 			WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-		
+
 		var existingID uuid.UUID
 		err = s.db.QueryRow(existingQuery, workspaceID, invitedUser.ID).Scan(&existingID)
 		if err == nil {
@@ -212,7 +216,7 @@ func (s *service) InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail stri
 	existingInviteQuery := `
 		SELECT id FROM workspace_invitations 
 		WHERE workspace_id = $1 AND invitee_email = $2 AND status = 'pending'`
-	
+
 	var existingInviteID uuid.UUID
 	err = s.db.QueryRow(existingInviteQuery, workspaceID, invitedEmail).Scan(&existingInviteID)
 	if err == nil {
@@ -311,8 +315,8 @@ func (s *service) AcceptWorkspaceInvitationByToken(token string, userID int) err
 	notificationQuery := `
 		INSERT INTO notifications (user_id, type, title, message, data)
 		VALUES ($1, $2, $3, $4, $5)`
-	
-	_, err = tx.Exec(notificationQuery, inviterNotification.UserID, inviterNotification.Type, 
+
+	_, err = tx.Exec(notificationQuery, inviterNotification.UserID, inviterNotification.Type,
 		inviterNotification.Title, inviterNotification.Message, inviterNotification.Data)
 	if err != nil {
 		// Don't fail the whole operation for notification errors
@@ -379,13 +383,13 @@ func (s *service) UpdateWorkspace(workspaceID uuid.UUID, name, description, sett
 	permissionQuery := `
 		SELECT role FROM workspace_memberships 
 		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-	
+
 	var role string
 	err := s.db.QueryRow(permissionQuery, workspaceID, userID).Scan(&role)
 	if err != nil {
 		return fmt.Errorf("user does not have access to this workspace")
 	}
-	
+
 	if role != "owner" && role != "admin" {
 		return fmt.Errorf("insufficient permissions to update workspace")
 	}
@@ -395,7 +399,7 @@ func (s *service) UpdateWorkspace(workspaceID uuid.UUID, name, description, sett
 		UPDATE workspaces 
 		SET name = $1, description = $2, settings = $3, updated_at = NOW()
 		WHERE id = $4`
-	
+
 	result, err := s.db.Exec(updateQuery, name, description, settings, workspaceID)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace: %w", err)
@@ -419,7 +423,7 @@ func (s *service) GetWorkspaceMembers(workspaceID uuid.UUID, userID int) ([]Work
 	accessQuery := `
 		SELECT role FROM workspace_memberships 
 		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-	
+
 	var userRole string
 	err := s.db.QueryRow(accessQuery, workspaceID, userID).Scan(&userRole)
 	if err != nil {
@@ -470,13 +474,13 @@ func (s *service) GetWorkspacePendingInvitations(workspaceID uuid.UUID, userID i
 	permissionQuery := `
 		SELECT role FROM workspace_memberships 
 		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-	
+
 	var role string
 	err := s.db.QueryRow(permissionQuery, workspaceID, userID).Scan(&role)
 	if err != nil {
 		return nil, fmt.Errorf("user does not have access to this workspace")
 	}
-	
+
 	if role != "owner" && role != "admin" {
 		return nil, fmt.Errorf("insufficient permissions to view pending invitations")
 	}
@@ -521,13 +525,13 @@ func (s *service) UpdateMemberRole(workspaceID uuid.UUID, memberUserID int, newR
 	permissionQuery := `
 		SELECT role FROM workspace_memberships 
 		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-	
+
 	var updaterRole string
 	err := s.db.QueryRow(permissionQuery, workspaceID, updaterUserID).Scan(&updaterRole)
 	if err != nil {
 		return fmt.Errorf("user does not have access to this workspace")
 	}
-	
+
 	if updaterRole != "owner" && updaterRole != "admin" {
 		return fmt.Errorf("insufficient permissions to update member roles")
 	}
@@ -555,7 +559,7 @@ func (s *service) UpdateMemberRole(workspaceID uuid.UUID, memberUserID int, newR
 		UPDATE workspace_memberships 
 		SET role = $1 
 		WHERE workspace_id = $2 AND user_id = $3`
-	
+
 	result, err := s.db.Exec(updateQuery, newRole, workspaceID, memberUserID)
 	if err != nil {
 		return fmt.Errorf("failed to update member role: %w", err)
@@ -579,13 +583,13 @@ func (s *service) RemoveMemberFromWorkspace(workspaceID uuid.UUID, memberUserID 
 	permissionQuery := `
 		SELECT role FROM workspace_memberships 
 		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
-	
+
 	var removerRole string
 	err := s.db.QueryRow(permissionQuery, workspaceID, removerUserID).Scan(&removerRole)
 	if err != nil {
 		return fmt.Errorf("user does not have access to this workspace")
 	}
-	
+
 	if removerRole != "owner" && removerRole != "admin" {
 		return fmt.Errorf("insufficient permissions to remove members")
 	}
@@ -608,12 +612,12 @@ func (s *service) RemoveMemberFromWorkspace(workspaceID uuid.UUID, memberUserID 
 		countQuery := `
 			SELECT COUNT(*) FROM workspace_memberships 
 			WHERE workspace_id = $1 AND role = 'owner' AND status = 'active'`
-		
+
 		err = s.db.QueryRow(countQuery, workspaceID).Scan(&ownerCount)
 		if err != nil {
 			return fmt.Errorf("failed to check owner count: %w", err)
 		}
-		
+
 		if ownerCount <= 1 {
 			return fmt.Errorf("cannot remove the last owner from workspace")
 		}
@@ -624,7 +628,7 @@ func (s *service) RemoveMemberFromWorkspace(workspaceID uuid.UUID, memberUserID 
 		UPDATE workspace_memberships 
 		SET status = 'removed' 
 		WHERE workspace_id = $1 AND user_id = $2`
-	
+
 	result, err := s.db.Exec(removeQuery, workspaceID, memberUserID)
 	if err != nil {
 		return fmt.Errorf("failed to remove member: %w", err)
@@ -650,11 +654,11 @@ func (s *service) CancelWorkspaceInvitation(invitationID uuid.UUID, userID int) 
 		FROM workspace_invitations wi
 		JOIN workspace_memberships wm ON wi.workspace_id = wm.workspace_id
 		WHERE wi.id = $1 AND wm.user_id = $2 AND wm.status = 'active' AND wi.status = 'pending'`
-	
+
 	var workspaceID uuid.UUID
 	var inviterID int
 	var role string
-	
+
 	err := s.db.QueryRow(checkQuery, invitationID, userID).Scan(&workspaceID, &inviterID, &role)
 	if err != nil {
 		return fmt.Errorf("invitation not found or insufficient permissions")
@@ -670,7 +674,7 @@ func (s *service) CancelWorkspaceInvitation(invitationID uuid.UUID, userID int) 
 		UPDATE workspace_invitations 
 		SET status = 'cancelled', updated_at = NOW()
 		WHERE id = $1 AND status = 'pending'`
-	
+
 	result, err := s.db.Exec(cancelQuery, invitationID)
 	if err != nil {
 		return fmt.Errorf("failed to cancel invitation: %w", err)

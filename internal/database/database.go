@@ -35,7 +35,7 @@ type Service interface {
 	InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail string, inviterUserID int, role string) error
 	AcceptWorkspaceInvitationByToken(token string, userID int) error
 	DeclineWorkspaceInvitation(token string, userID int) error
-	
+
 	// NEW: Workspace management methods
 	UpdateWorkspace(workspaceID uuid.UUID, name, description, settings string, userID int) error
 	GetWorkspaceMembers(workspaceID uuid.UUID, userID int) ([]WorkspaceMember, error)
@@ -52,6 +52,16 @@ type Service interface {
 	CreateNotification(notification *Notification) error
 	GetUserNotifications(userID int, limit int) ([]*Notification, error)
 	MarkNotificationAsRead(notificationID uuid.UUID, userID int) error
+
+	// Template operations
+	CreateTemplate(template *Template, fields []TemplateField) (*Template, error)
+	GetTemplateByID(templateID uuid.UUID, userID int) (*Template, error)
+	GetTemplateWithFields(templateID uuid.UUID, userID int) (*TemplateWithFields, error)
+	GetTemplateFields(templateID uuid.UUID, userID int) ([]TemplateField, error)
+	GetWorkspaceTemplates(workspaceID uuid.UUID, userID int) ([]UserTemplate, error)
+	UpdateTemplate(templateID uuid.UUID, name, description string, userID int) error
+	DeactivateTemplate(templateID uuid.UUID, userID int) error
+	AddFieldsToTemplate(templateID uuid.UUID, fields []TemplateField, userID int) error
 }
 
 type service struct {

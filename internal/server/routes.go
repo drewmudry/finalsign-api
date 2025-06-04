@@ -37,16 +37,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 	userRoutes := routes.NewUserRoutes(s)
 	workspaceRoutes := routes.NewWorkspaceRoutes(s)
 	notificationRoutes := routes.NewNotificationRoutes(s)
+	templateRoutes := routes.NewTemplateRoutes(s)
 
 	// Register route groups
 	authRoutes.RegisterRoutes(r)
 	userRoutes.RegisterRoutes(r)
 	workspaceRoutes.RegisterRoutes(r)
 	notificationRoutes.RegisterRoutes(r)
+	templateRoutes.RegisterRoutes(r)
 
 	return r
 }
-
 
 func (s *Server) healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, s.db.Health())
