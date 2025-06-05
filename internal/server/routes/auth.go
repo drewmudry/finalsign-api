@@ -94,5 +94,5 @@ func (ar *AuthRoutes) logoutHandler(c *gin.Context) {
 	session.Clear()
 	session.Save()
 
-	c.Redirect(http.StatusFound, "http://localhost:3000/")
+	c.Redirect(http.StatusFound, os.Getenv("FRONTEND_URL"))
 }
