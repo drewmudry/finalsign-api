@@ -32,6 +32,11 @@ type Service interface {
 	GetUserWorkspaces(userID int) ([]UserWorkspace, error)
 	GetWorkspaceBySlug(slug string) (*Workspace, error)
 	CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*UserWorkspace, error)
+	CheckUserWorkspaceOwner(userID int, workspaceSlug string) (*UserWorkspace, error)
+	CheckUserWorkspaceAdmin(userID int, workspaceSlug string) (*UserWorkspace, error)
+	CheckUserWorkspaceMember(userID int, workspaceSlug string) (*UserWorkspace, error)
+	CheckUserWorkspaceViewer(userID int, workspaceSlug string) (*UserWorkspace, error)
+
 	InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail string, inviterUserID int, role string) error
 	AcceptWorkspaceInvitationByToken(token string, userID int) error
 	DeclineWorkspaceInvitation(token string, userID int) error

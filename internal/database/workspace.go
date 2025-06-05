@@ -191,6 +191,111 @@ func (s *service) CheckUserWorkspaceAccess(userID int, workspaceSlug string) (*U
 	return &uw, nil
 }
 
+func (s *service) CheckUserWorkspaceOwner(userID int, workspaceSlug string) (*UserWorkspace, error) {
+	var uw UserWorkspace
+	query := `
+		SELECT 
+			user_id, email, user_name, workspace_id, workspace_name, 
+			workspace_slug, role, membership_status, joined_at, plan, workspace_active
+		FROM user_workspaces 
+		WHERE user_id = $1 
+		AND workspace_slug = $2
+		AND role = 'owner'
+		AND membership_status = 'active'
+		AND workspace_active = true`
+
+	err := s.db.QueryRow(query, userID, workspaceSlug).Scan(
+		&uw.UserID, &uw.Email, &uw.UserName, &uw.WorkspaceID,
+		&uw.WorkspaceName, &uw.WorkspaceSlug, &uw.Role,
+		&uw.MembershipStatus, &uw.JoinedAt, &uw.Plan, &uw.WorkspaceActive,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("access denied: user does not have required permissions for workspace")
+	}
+
+	return &uw, nil
+}
+
+func (s *service) CheckUserWorkspaceAdmin(userID int, workspaceSlug string) (*UserWorkspace, error) {
+	var uw UserWorkspace
+	query := `
+		SELECT 
+			user_id, email, user_name, workspace_id, workspace_name, 
+			workspace_slug, role, membership_status, joined_at, plan, workspace_active
+		FROM user_workspaces 
+		WHERE user_id = $1 
+		AND workspace_slug = $2
+		AND role = 'admin'
+		AND membership_status = 'active'
+		AND workspace_active = true`
+
+	err := s.db.QueryRow(query, userID, workspaceSlug).Scan(
+		&uw.UserID, &uw.Email, &uw.UserName, &uw.WorkspaceID,
+		&uw.WorkspaceName, &uw.WorkspaceSlug, &uw.Role,
+		&uw.MembershipStatus, &uw.JoinedAt, &uw.Plan, &uw.WorkspaceActive,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("access denied: user does not have required permissions for workspace")
+	}
+
+	return &uw, nil
+}
+
+func (s *service) CheckUserWorkspaceMember(userID int, workspaceSlug string) (*UserWorkspace, error) {
+	var uw UserWorkspace
+	query := `
+		SELECT 
+			user_id, email, user_name, workspace_id, workspace_name, 
+			workspace_slug, role, membership_status, joined_at, plan, workspace_active
+		FROM user_workspaces 
+		WHERE user_id = $1 
+		AND workspace_slug = $2
+		AND role = 'member'
+		AND membership_status = 'active'
+		AND workspace_active = true`
+
+	err := s.db.QueryRow(query, userID, workspaceSlug).Scan(
+		&uw.UserID, &uw.Email, &uw.UserName, &uw.WorkspaceID,
+		&uw.WorkspaceName, &uw.WorkspaceSlug, &uw.Role,
+		&uw.MembershipStatus, &uw.JoinedAt, &uw.Plan, &uw.WorkspaceActive,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("access denied: user does not have required permissions for workspace")
+	}
+
+	return &uw, nil
+}
+
+
+func (s *service) CheckUserWorkspaceViewer(userID int, workspaceSlug string) (*UserWorkspace, error) {
+	var uw UserWorkspace
+	query := `
+		SELECT 
+			user_id, email, user_name, workspace_id, workspace_name, 
+			workspace_slug, role, membership_status, joined_at, plan, workspace_active
+		FROM user_workspaces 
+		WHERE user_id = $1 
+		AND workspace_slug = $2
+		AND role = 'viewer'
+		AND membership_status = 'active'
+		AND workspace_active = true`
+
+	err := s.db.QueryRow(query, userID, workspaceSlug).Scan(
+		&uw.UserID, &uw.Email, &uw.UserName, &uw.WorkspaceID,
+		&uw.WorkspaceName, &uw.WorkspaceSlug, &uw.Role,
+		&uw.MembershipStatus, &uw.JoinedAt, &uw.Plan, &uw.WorkspaceActive,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("access denied: user does not have required permissions for workspace")
+	}
+
+	return &uw, nil
+}
+
 // InviteUserToWorkspace creates a pending invitation for a user to join a workspace
 // InviteUserToWorkspace creates a new workspace invitation
 func (s *service) InviteUserToWorkspace(workspaceID uuid.UUID, invitedEmail string, inviterUserID int, role string) error {
