@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
@@ -15,24 +15,8 @@ services:
     networks:
       - local_dev_network
 
-  minio:
-    image: minio/minio:latest
-    container_name: local_minio
-    environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-    ports:
-      - "9000:9000" # API
-      - "9001:9001" # Console
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    networks:
-      - local_dev_network
-
 volumes:
   postgres_data:
-  minio_data:
 
 networks:
   local_dev_network:
