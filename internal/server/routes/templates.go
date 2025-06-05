@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -40,7 +41,7 @@ func (tr *TemplateRoutes) RegisterRoutes(r *gin.Engine) {
 }
 
 // createTemplateHandler handles PDF upload and template creation
-func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {
+func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {	
 	user := c.MustGet("user").(*database.User)
 	workspace := c.MustGet("workspace").(*database.UserWorkspace)
 
@@ -49,18 +50,16 @@ func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions to create templates"})
 		return
 	}
-
-	// Parse multipart form
-	err := c.Request.ParseMultipartForm(32 << 20) // 32 MB max
+	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form data"})
 		return
 	}
 
-	// Get form fields
+	
 	name := c.PostForm("name")
 	description := c.PostForm("description")
-	fieldsJSON := c.PostForm("fields") // Optional: fields can be added later
+	fieldsJSON := c.PostForm("fields")
 
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Template name is required"})
@@ -91,8 +90,22 @@ func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {
 		return
 	}
 
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read file"})
+		return
+	}
+	if len(fileBytes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File is empty"})
+		return
+	}
+	
+	if seeker, ok := file.(io.Seeker); ok {
+		seeker.Seek(0, io.SeekStart)
+	}
+
 	// Upload to S3
-	s3Service := tr.server.GetS3Service()
+	s3Service := tr.server.GetS3Service()	
 	uploadResult, err := s3Service.UploadTemplate(c.Request.Context(), file, header, user.ID, workspace.WorkspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload PDF"})
@@ -134,7 +147,6 @@ func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {
 		IsActive:    true,
 		Version:     1,
 	}
-
 	db := tr.server.GetDB()
 	createdTemplate, err := db.CreateTemplate(template, fields)
 	if err != nil {
@@ -159,25 +171,15 @@ func (tr *TemplateRoutes) createTemplateHandler(c *gin.Context) {
 
 // getWorkspaceTemplatesHandler returns all templates for a workspace
 func (tr *TemplateRoutes) getWorkspaceTemplatesHandler(c *gin.Context) {
-	fmt.Println("DEBUG: Entering getWorkspaceTemplatesHandler")
-
 	user := c.MustGet("user").(*database.User)
-	fmt.Printf("DEBUG: User ID: %d\n", user.ID)
-
 	workspace := c.MustGet("workspace").(*database.UserWorkspace)
-	fmt.Printf("DEBUG: Workspace ID: %s, Name: %s\n", workspace.WorkspaceID, workspace.WorkspaceName)
 
 	db := tr.server.GetDB()
-	fmt.Println("DEBUG: About to call GetWorkspaceTemplates")
-
 	templates, err := db.GetWorkspaceTemplates(workspace.WorkspaceID, user.ID)
 	if err != nil {
-		fmt.Printf("DEBUG: Error from GetWorkspaceTemplates: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch templates"})
 		return
 	}
-
-	fmt.Printf("DEBUG: Successfully got %d templates\n", len(templates))
 
 	c.JSON(http.StatusOK, gin.H{
 		"templates": templates,

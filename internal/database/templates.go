@@ -224,12 +224,35 @@ func (s *service) GetTemplateFields(templateID uuid.UUID, userID int) ([]Templat
 
 // GetWorkspaceTemplates retrieves all templates for a workspace that user has access to
 func (s *service) GetWorkspaceTemplates(workspaceID uuid.UUID, userID int) ([]UserTemplate, error) {
+	// First check if user has access to this workspace
+	accessQuery := `
+		SELECT role FROM workspace_memberships 
+		WHERE workspace_id = $1 AND user_id = $2 AND status = 'active'`
+
+	var userRole string
+	err := s.db.QueryRow(accessQuery, workspaceID, userID).Scan(&userRole)
+	if err != nil {
+		return nil, fmt.Errorf("user does not have access to this workspace")
+	}
+
+	// Updated query with JOIN to get creator information and field count
 	query := `
-		SELECT id, name, description, file_size, created_by, 
-		       is_active, created_at, updated_at, version
-		FROM templates 
-		WHERE workspace_id = $1 AND is_active = true
-		ORDER BY created_at DESC`
+		SELECT 
+			t.id, t.name, t.description, t.file_size, t.created_by,
+			u.name as creator_name, u.email as creator_email,
+			t.workspace_id, w.name as workspace_name,
+			COALESCE(field_counts.field_count, 0) as field_count,
+			t.is_active, t.created_at, t.updated_at, t.version
+		FROM templates t
+		JOIN users u ON t.created_by = u.id
+		JOIN workspaces w ON t.workspace_id = w.id
+		LEFT JOIN (
+			SELECT template_id, COUNT(*) as field_count
+			FROM template_fields
+			GROUP BY template_id
+		) field_counts ON t.id = field_counts.template_id
+		WHERE t.workspace_id = $1 AND t.is_active = true
+		ORDER BY t.created_at DESC`
 
 	rows, err := s.db.Query(query, workspaceID)
 	if err != nil {
@@ -242,8 +265,9 @@ func (s *service) GetWorkspaceTemplates(workspaceID uuid.UUID, userID int) ([]Us
 		var template UserTemplate
 		err := rows.Scan(
 			&template.ID, &template.Name, &template.Description, &template.FileSize,
-			&template.CreatedBy, &template.IsActive,
-			&template.CreatedAt, &template.UpdatedAt, &template.Version,
+			&template.CreatedBy, &template.CreatorName, &template.CreatorEmail,
+			&template.WorkspaceID, &template.WorkspaceName, &template.FieldCount,
+			&template.IsActive, &template.CreatedAt, &template.UpdatedAt, &template.Version,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan template: %w", err)
