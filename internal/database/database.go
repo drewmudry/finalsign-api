@@ -41,7 +41,7 @@ type Service interface {
 	AcceptWorkspaceInvitationByToken(token string, userID int) error
 	DeclineWorkspaceInvitation(token string, userID int) error
 
-	// NEW: Workspace management methods
+	// Workspace management methods
 	UpdateWorkspace(workspaceID uuid.UUID, name, description, settings string, userID int) error
 	GetWorkspaceMembers(workspaceID uuid.UUID, userID int) ([]WorkspaceMember, error)
 	GetWorkspacePendingInvitations(workspaceID uuid.UUID, userID int) ([]WorkspaceInvitation, error)
@@ -58,15 +58,19 @@ type Service interface {
 	GetUserNotifications(userID int, limit int) ([]*Notification, error)
 	MarkNotificationAsRead(notificationID uuid.UUID, userID int) error
 
-	// Template operations
-	CreateTemplate(template *Template, fields []TemplateField) (*Template, error)
+	// Template operations - UPDATED to match templates.go
+	CreateTemplateWithSignersAndFields(template *Template, signers []TemplateSigner, fields []TemplateField) (*Template, error)
 	GetTemplateByID(templateID uuid.UUID, userID int) (*Template, error)
-	GetTemplateWithFields(templateID uuid.UUID, userID int) (*TemplateWithFields, error)
+	GetTemplateWithSignersAndFields(templateID uuid.UUID, userID int) (*TemplateWithSignersAndFields, error)
+	GetTemplateSigners(templateID uuid.UUID, userID int) ([]TemplateSigner, error)
 	GetTemplateFields(templateID uuid.UUID, userID int) ([]TemplateField, error)
-	GetWorkspaceTemplates(workspaceID uuid.UUID, userID int) ([]UserTemplate, error)
+	GetWorkspaceTemplatesList(workspaceID uuid.UUID, userID int) ([]TemplateListItem, error)
 	UpdateTemplate(templateID uuid.UUID, name, description string, userID int) error
 	DeactivateTemplate(templateID uuid.UUID, userID int) error
-	AddFieldsToTemplate(templateID uuid.UUID, fields []TemplateField, userID int) error
+	
+	// Template field operations - UPDATED  
+	ReplaceTemplateFields(templateID uuid.UUID, fields []TemplateField, userID int) error
+	ReplaceTemplateSigners(templateID uuid.UUID, signers []TemplateSigner, userID int) error
 }
 
 type service struct {
@@ -74,7 +78,6 @@ type service struct {
 }
 
 var (
-	// db_string  = os.Getenv("DB_STRING") // Remove from here
 	dbInstance *service
 )
 
@@ -83,7 +86,7 @@ func New() Service {
 	if dbInstance != nil {
 		return dbInstance
 	}
-	db_string := os.Getenv("DB_STRING") // Add here
+	db_string := os.Getenv("DB_STRING")
 	connStr := db_string
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
